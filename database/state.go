@@ -13,6 +13,7 @@ type State struct {
 	txMempool []Tx
 
 	dbFile        *os.File
+	lastBlock     Block
 	lastBlockHash Hash
 }
 
@@ -39,7 +40,7 @@ func NewStateFromDisk(dataDir string) (*State, error) {
 	}
 
 	scanner := bufio.NewScanner(blocks)
-	state := &State{balances, make([]Tx, 0), blocks, Hash{}}
+	state := &State{balances, make([]Tx, 0), blocks, Block{}, Hash{}}
 
 	for scanner.Scan() {
 		if err := scanner.Err(); err != nil {
@@ -47,6 +48,11 @@ func NewStateFromDisk(dataDir string) (*State, error) {
 		}
 
 		blockFsJson := scanner.Bytes()
+
+		if len(blockFsJson) == 0 {
+			break
+		}
+
 		var blockFs BlockFS
 		err = json.Unmarshal(blockFsJson, &blockFs)
 		if err != nil {
@@ -58,10 +64,15 @@ func NewStateFromDisk(dataDir string) (*State, error) {
 			return nil, err
 		}
 
+		state.lastBlock = blockFs.Value
 		state.lastBlockHash = blockFs.Key
 	}
 
 	return state, nil
+}
+
+func (s *State) LastBlock() Block {
+	return s.lastBlock
 }
 
 func (s *State) LatestBlockHash() Hash {
@@ -88,7 +99,12 @@ func (s *State) AddTx(tx Tx) error {
 }
 
 func (s *State) Persist() (Hash, error) {
-	block := NewBlock(s.lastBlockHash, uint64(time.Now().Unix()), s.txMempool)
+	lastBlockHash, err := s.lastBlock.Hash()
+	if err != nil {
+		return Hash{}, err
+	}
+
+	block := NewBlock(lastBlockHash, s.lastBlock.Header.Number+1, uint64(time.Now().Unix()), s.txMempool)
 	blockHash, err := block.Hash()
 	if err != nil {
 		return Hash{}, err
@@ -107,10 +123,11 @@ func (s *State) Persist() (Hash, error) {
 		return Hash{}, err
 	}
 
-	s.lastBlockHash = blockHash
+	s.lastBlockHash = lastBlockHash
+	s.lastBlock = block
 	s.txMempool = []Tx{}
 
-	return s.lastBlockHash, nil
+	return lastBlockHash, nil
 }
 
 func (s *State) applyBlock(b Block) error {
