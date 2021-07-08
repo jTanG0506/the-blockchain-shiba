@@ -20,6 +20,11 @@ type BalancesRes struct {
 	Balances map[database.Account]uint `json:"balances"`
 }
 
+type StatusRes struct {
+	Hash   database.Hash `json:"block_hash"`
+	Number uint64        `json:"block_number"`
+}
+
 type AddTXReq struct {
 	From  string `json:"from"`
 	To    string `json:"to"`
@@ -43,6 +48,10 @@ func Run(dataDir string) error {
 		listBalancesHandler(w, r, state)
 	})
 
+	http.HandleFunc("/node/status", func(w http.ResponseWriter, r *http.Request) {
+		statusHandler(w, r, state)
+	})
+
 	http.HandleFunc("/tx/add", func(w http.ResponseWriter, r *http.Request) {
 		txAddHandler(w, r, state)
 	})
@@ -52,6 +61,15 @@ func Run(dataDir string) error {
 
 func listBalancesHandler(w http.ResponseWriter, r *http.Request, state *database.State) {
 	writeRes(w, BalancesRes{state.LatestBlockHash(), state.Balances})
+}
+
+func statusHandler(w http.ResponseWriter, r *http.Request, state *database.State) {
+	res := StatusRes{
+		Hash:   state.LatestBlockHash(),
+		Number: state.LastBlock().Header.Number,
+	}
+
+	writeRes(w, res)
 }
 
 func txAddHandler(w http.ResponseWriter, r *http.Request, state *database.State) {
