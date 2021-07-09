@@ -32,6 +32,10 @@ type AddTXRes struct {
 	Hash database.Hash `json:"block_hash"`
 }
 
+type SyncRes struct {
+	Blocks []database.Block `json:"blocks"`
+}
+
 func listBalancesHandler(w http.ResponseWriter, r *http.Request, state *database.State) {
 	writeRes(w, BalancesRes{state.LatestBlockHash(), state.Balances})
 }
@@ -73,4 +77,23 @@ func txAddHandler(w http.ResponseWriter, r *http.Request, state *database.State)
 	}
 
 	writeRes(w, AddTXRes{hash})
+}
+
+func syncHandler(w http.ResponseWriter, r *http.Request, dataDir string) {
+	reqHash := r.URL.Query().Get(syncEndpointQueryKeyFromBlock)
+	hash := database.Hash{}
+
+	err := hash.UnmarshalText([]byte(reqHash))
+	if err != nil {
+		writeErrRes(w, err)
+		return
+	}
+
+	blocks, err := database.GetBlocksAfter(hash, dataDir)
+	if err != nil {
+		writeErrRes(w, err)
+		return
+	}
+
+	writeRes(w, SyncRes{Blocks: blocks})
 }
