@@ -16,9 +16,9 @@ type BalancesRes struct {
 }
 
 type StatusRes struct {
-	Hash       database.Hash `json:"block_hash"`
-	Number     uint64        `json:"block_number"`
-	KnownPeers []PeerNode    `json:"peers_known"`
+	Hash       database.Hash       `json:"block_hash"`
+	Number     uint64              `json:"block_number"`
+	KnownPeers map[string]PeerNode `json:"peers_known"`
 }
 
 type AddTXReq struct {
