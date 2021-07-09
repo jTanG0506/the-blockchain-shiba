@@ -13,7 +13,6 @@ func runCmd() *cobra.Command {
 		Use:   "run",
 		Short: "Launches the TBS node and its HTTP API",
 		Run: func(cmd *cobra.Command, args []string) {
-			dataDir, _ := cmd.Flags().GetString(flagDataDir)
 			port, _ := cmd.Flags().GetUint64(flagPort)
 
 			fmt.Println("Launching TBS node and its HTTP API...")
@@ -25,7 +24,7 @@ func runCmd() *cobra.Command {
 				true,
 			)
 
-			n := node.NewNode(dataDir, port, bootstrap)
+			n := node.NewNode(getDataDirFromCmd(cmd), port, bootstrap)
 			err := n.Run()
 			if err != nil {
 				fmt.Println(err)
