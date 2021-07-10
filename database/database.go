@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
+	"reflect"
 )
 
 func GetBlocksAfter(hash Hash, dataDir string) ([]Block, error) {
@@ -14,6 +15,11 @@ func GetBlocksAfter(hash Hash, dataDir string) ([]Block, error) {
 
 	blocks := make([]Block, 0)
 	shouldCollect := false
+
+	if reflect.DeepEqual(hash, Hash{}) {
+		shouldCollect = true
+	}
+
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		if err := scanner.Err(); err != nil {

@@ -9,6 +9,7 @@ import (
 )
 
 const flagDataDir = "datadir"
+const flagIP = "ip"
 const flagPort = "port"
 
 func main() {

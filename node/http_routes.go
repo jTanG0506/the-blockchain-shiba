@@ -1,7 +1,10 @@
 package node
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/jTanG0506/go-blockchain/database"
 )
@@ -36,6 +39,11 @@ type SyncRes struct {
 	Blocks []database.Block `json:"blocks"`
 }
 
+type AddPeerRes struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+}
+
 func listBalancesHandler(w http.ResponseWriter, r *http.Request, state *database.State) {
 	writeRes(w, BalancesRes{state.LatestBlockHash(), state.Balances})
 }
@@ -64,13 +72,15 @@ func txAddHandler(w http.ResponseWriter, r *http.Request, state *database.State)
 		req.Value,
 		req.Data,
 	)
-	err = state.AddTx(tx)
-	if err != nil {
-		writeErrRes(w, err)
-		return
-	}
 
-	hash, err := state.Persist()
+	block := database.NewBlock(
+		state.LatestBlockHash(),
+		state.NextBlockNumber(),
+		uint64(time.Now().Unix()),
+		[]database.Tx{tx},
+	)
+
+	hash, err := state.AddBlock(block)
 	if err != nil {
 		writeErrRes(w, err)
 		return
@@ -79,7 +89,7 @@ func txAddHandler(w http.ResponseWriter, r *http.Request, state *database.State)
 	writeRes(w, AddTXRes{hash})
 }
 
-func syncHandler(w http.ResponseWriter, r *http.Request, dataDir string) {
+func syncHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 	reqHash := r.URL.Query().Get(syncEndpointQueryKeyFromBlock)
 	hash := database.Hash{}
 
@@ -89,11 +99,28 @@ func syncHandler(w http.ResponseWriter, r *http.Request, dataDir string) {
 		return
 	}
 
-	blocks, err := database.GetBlocksAfter(hash, dataDir)
+	blocks, err := database.GetBlocksAfter(hash, node.dataDir)
 	if err != nil {
 		writeErrRes(w, err)
 		return
 	}
 
 	writeRes(w, SyncRes{Blocks: blocks})
+}
+
+func addPeerHandler(w http.ResponseWriter, r *http.Request, node *Node) {
+	peerIP := r.URL.Query().Get(addPeerEndpointQueryKeyIP)
+	peerPortRaw := r.URL.Query().Get(addPeerEndpointQueryKeyPort)
+
+	peerPort, err := strconv.ParseUint(peerPortRaw, 10, 32)
+	if err != nil {
+		writeRes(w, AddPeerRes{false, err.Error()})
+		return
+	}
+
+	peer := NewPeerNode(peerIP, peerPort, false, true)
+	node.AddPeer(peer)
+	fmt.Printf("Peer '%s' was added into KnownPeers\n", peer.TcpAddress())
+
+	writeRes(w, AddPeerRes{true, ""})
 }
