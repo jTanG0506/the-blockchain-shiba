@@ -129,8 +129,8 @@ func (s *State) AddBlock(b Block) (Hash, error) {
 	}
 
 	s.Balances = tempState.Balances
-	s.lastBlockHash = tempState.lastBlockHash
-	s.lastBlock = tempState.lastBlock
+	s.lastBlockHash = blockHash
+	s.lastBlock = b
 	s.hasGenesisBlock = true
 
 	return blockHash, nil
