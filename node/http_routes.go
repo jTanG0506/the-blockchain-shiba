@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/jTanG0506/go-blockchain/database"
 )
@@ -22,6 +21,7 @@ type StatusRes struct {
 	Hash       database.Hash       `json:"block_hash"`
 	Number     uint64              `json:"block_number"`
 	KnownPeers map[string]PeerNode `json:"peers_known"`
+	PendingTXs []database.Tx       `json:"pending_txs"`
 }
 
 type AddTXReq struct {
@@ -32,7 +32,7 @@ type AddTXReq struct {
 }
 
 type AddTXRes struct {
-	Hash database.Hash `json:"block_hash"`
+	Success bool `json:"success"`
 }
 
 type SyncRes struct {
@@ -53,12 +53,13 @@ func statusHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 		Hash:       node.state.LatestBlockHash(),
 		Number:     node.state.LastBlock().Header.Number,
 		KnownPeers: node.knownPeers,
+		PendingTXs: node.getPendingTXsAsArray(),
 	}
 
 	writeRes(w, res)
 }
 
-func txAddHandler(w http.ResponseWriter, r *http.Request, state *database.State) {
+func txAddHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 	req := AddTXReq{}
 	err := readRequest(r, &req)
 	if err != nil {
@@ -73,20 +74,13 @@ func txAddHandler(w http.ResponseWriter, r *http.Request, state *database.State)
 		req.Data,
 	)
 
-	block := database.NewBlock(
-		state.LatestBlockHash(),
-		state.NextBlockNumber(),
-		uint64(time.Now().Unix()),
-		[]database.Tx{tx},
-	)
-
-	hash, err := state.AddBlock(block)
+	err = node.AddPendingTX(tx, node.info)
 	if err != nil {
 		writeErrRes(w, err)
 		return
 	}
 
-	writeRes(w, AddTXRes{hash})
+	writeRes(w, AddTXRes{Success: true})
 }
 
 func syncHandler(w http.ResponseWriter, r *http.Request, node *Node) {

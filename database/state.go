@@ -9,8 +9,7 @@ import (
 )
 
 type State struct {
-	Balances  map[Account]uint
-	txMempool []Tx
+	Balances map[Account]uint
 
 	dbFile          *os.File
 	lastBlock       Block
@@ -41,7 +40,7 @@ func NewStateFromDisk(dataDir string) (*State, error) {
 	}
 
 	scanner := bufio.NewScanner(blocks)
-	state := &State{balances, make([]Tx, 0), blocks, Block{}, Hash{}, false}
+	state := &State{balances, blocks, Block{}, Hash{}, false}
 
 	for scanner.Scan() {
 		if err := scanner.Err(); err != nil {
@@ -136,15 +135,6 @@ func (s *State) AddBlock(b Block) (Hash, error) {
 	return blockHash, nil
 }
 
-func (s *State) AddTx(tx Tx) error {
-	if err := applyTx(tx, s); err != nil {
-		return err
-	}
-
-	s.txMempool = append(s.txMempool, tx)
-	return nil
-}
-
 func applyBlock(b Block, s State) error {
 	expectedNextBlockNumber := s.lastBlock.Header.Number + 1
 
@@ -154,6 +144,15 @@ func applyBlock(b Block, s State) error {
 
 	if s.hasGenesisBlock && s.lastBlock.Header.Number > 0 && !reflect.DeepEqual(b.Header.Parent, s.lastBlockHash) {
 		return fmt.Errorf("next block parent hash must be '%x' not '%x'", s.lastBlockHash, b.Header.Parent)
+	}
+
+	hash, err := b.Hash()
+	if err != nil {
+		return err
+	}
+
+	if !IsBlockHashValid(hash) {
+		return fmt.Errorf("invalid block hash %x", hash)
 	}
 
 	return applyTXs(b.TXs, &s)
@@ -189,17 +188,12 @@ func applyTx(tx Tx, s *State) error {
 func (s *State) copy() State {
 	c := State{}
 	c.Balances = make(map[Account]uint)
-	c.txMempool = make([]Tx, len(s.txMempool))
 	c.lastBlock = s.lastBlock
 	c.lastBlockHash = s.lastBlockHash
 	c.hasGenesisBlock = s.hasGenesisBlock
 
 	for acc, balance := range s.Balances {
 		c.Balances[acc] = balance
-	}
-
-	for _, tx := range s.txMempool {
-		c.txMempool = append(c.txMempool, tx)
 	}
 
 	return c
