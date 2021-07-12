@@ -59,7 +59,7 @@ func NewStateFromDisk(dataDir string) (*State, error) {
 			return nil, err
 		}
 
-		err = applyTXs(blockFs.Value.TXs, state)
+		err = applyBlock(blockFs.Value, state)
 		if err != nil {
 			return nil, err
 		}
@@ -102,7 +102,7 @@ func (s *State) AddBlocks(blocks []Block) error {
 func (s *State) AddBlock(b Block) (Hash, error) {
 	tempState := s.copy()
 
-	err := applyBlock(b, tempState)
+	err := applyBlock(b, &tempState)
 	if err != nil {
 		return Hash{}, err
 	}
@@ -135,7 +135,7 @@ func (s *State) AddBlock(b Block) (Hash, error) {
 	return blockHash, nil
 }
 
-func applyBlock(b Block, s State) error {
+func applyBlock(b Block, s *State) error {
 	expectedNextBlockNumber := s.lastBlock.Header.Number + 1
 
 	if s.hasGenesisBlock && b.Header.Number != expectedNextBlockNumber {
@@ -155,7 +155,13 @@ func applyBlock(b Block, s State) error {
 		return fmt.Errorf("invalid block hash %x", hash)
 	}
 
-	return applyTXs(b.TXs, &s)
+	err = applyTXs(b.TXs, s)
+	if err != nil {
+		return err
+	}
+
+	s.Balances[b.Header.Miner] += BlockReward
+	return nil
 }
 
 func applyTXs(txs []Tx, s *State) error {
@@ -170,11 +176,6 @@ func applyTXs(txs []Tx, s *State) error {
 }
 
 func applyTx(tx Tx, s *State) error {
-	if tx.IsReward() {
-		s.Balances[tx.To] += tx.Value
-		return nil
-	}
-
 	if tx.Value > s.Balances[tx.From] {
 		return fmt.Errorf("insufficient balance. Sender '%s' balance is %d TBS. Tx cost is %d TBS", tx.From, s.Balances[tx.From], tx.Value)
 	}

@@ -64,6 +64,7 @@ func createRandomPendingBlock() PendingBlock {
 	return NewPendingBlock(
 		database.Hash{},
 		0,
+		database.Account("toshi"),
 		[]database.Tx{
 			database.NewTx("toshi", "jtang", 1000, ""),
 			database.NewTx("toshi", "toshi", 10, "reward"),

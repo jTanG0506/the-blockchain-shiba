@@ -10,6 +10,7 @@ import (
 	"github.com/jTanG0506/go-blockchain/database"
 )
 
+const DefaultMiner = ""
 const DefaultIP = "127.0.0.1"
 const DefaultHTTPPort = 8080
 const statusEndpoint = "/node/status"
@@ -21,12 +22,14 @@ const syncEndpointQueryKeyFromBlock = "fromBlock"
 const addPeerEndpoint = "/node/peer"
 const addPeerEndpointQueryKeyIP = "ip"
 const addPeerEndpointQueryKeyPort = "port"
+const addPeerEndpointQueryKeyMiner = "miner"
 
 type PeerNode struct {
-	IP          string `json:"ip"`
-	Port        uint64 `json:"port"`
-	IsBootstrap bool   `json:"is_bootstrap"`
-	IsActive    bool   `json:"is_active"`
+	IP          string           `json:"ip"`
+	Port        uint64           `json:"port"`
+	IsBootstrap bool             `json:"is_bootstrap"`
+	Account     database.Account `json:"account"`
+	IsActive    bool             `json:"is_active"`
 }
 
 func (pn PeerNode) TcpAddress() string {
@@ -46,13 +49,13 @@ type Node struct {
 	isMining        bool
 }
 
-func NewNode(dataDir string, ip string, port uint64, bootstrap PeerNode) *Node {
+func NewNode(dataDir string, ip string, port uint64, acc database.Account, bootstrap PeerNode) *Node {
 	knownPeers := make(map[string]PeerNode)
 	knownPeers[bootstrap.TcpAddress()] = bootstrap
 
 	return &Node{
 		dataDir:         dataDir,
-		info:            NewPeerNode(ip, port, false, true),
+		info:            NewPeerNode(ip, port, false, acc, true),
 		knownPeers:      knownPeers,
 		pendingTXs:      make(map[string]database.Tx),
 		archivedTXs:     make(map[string]database.Tx),
@@ -62,8 +65,8 @@ func NewNode(dataDir string, ip string, port uint64, bootstrap PeerNode) *Node {
 	}
 }
 
-func NewPeerNode(ip string, port uint64, isBootstrap bool, isActive bool) PeerNode {
-	return PeerNode{ip, port, isBootstrap, isActive}
+func NewPeerNode(ip string, port uint64, isBootstrap bool, acc database.Account, isActive bool) PeerNode {
+	return PeerNode{ip, port, isBootstrap, acc, isActive}
 }
 
 func (n *Node) Run(ctx context.Context) error {
@@ -153,6 +156,7 @@ func (n *Node) minePendingTXs(ctx context.Context) error {
 	blockToMine := NewPendingBlock(
 		n.state.LatestBlockHash(),
 		n.state.LastBlock().Header.Number+1,
+		n.info.Account,
 		n.getPendingTXsAsArray(),
 	)
 
