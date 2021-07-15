@@ -7,10 +7,12 @@ import (
 	"os"
 	"reflect"
 	"sort"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type State struct {
-	Balances map[Account]uint
+	Balances map[common.Address]uint
 
 	dbFile          *os.File
 	lastBlock       Block
@@ -29,7 +31,7 @@ func NewStateFromDisk(dataDir string) (*State, error) {
 		return nil, err
 	}
 
-	balances := make(map[Account]uint)
+	balances := make(map[common.Address]uint)
 	for account, balance := range gen.Balances {
 		balances[account] = balance
 	}
@@ -193,7 +195,7 @@ func applyTx(tx Tx, s *State) error {
 
 func (s *State) copy() State {
 	c := State{}
-	c.Balances = make(map[Account]uint)
+	c.Balances = make(map[common.Address]uint)
 	c.lastBlock = s.lastBlock
 	c.lastBlockHash = s.lastBlockHash
 	c.hasGenesisBlock = s.hasGenesisBlock

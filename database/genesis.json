@@ -2,6 +2,6 @@
   "genesis_time": "2020-06-07T00:00:00.000000000Z",
   "chain_id": "the-blockchain-shiba-ledger",
   "balances": {
-    "toshi": 1000000
+    "0xe5ED8C1829192380205b1E7BB5A3F44baf181d25": 1000000
   }
 }

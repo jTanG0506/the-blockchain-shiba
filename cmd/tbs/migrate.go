@@ -7,6 +7,7 @@ import (
 
 	"github.com/jTanG0506/go-blockchain/database"
 	"github.com/jTanG0506/go-blockchain/node"
+	"github.com/jTanG0506/go-blockchain/wallet"
 	"github.com/spf13/cobra"
 )
 
@@ -19,21 +20,25 @@ var migrateCmd = func() *cobra.Command {
 			ip, _ := cmd.Flags().GetString(flagIP)
 			port, _ := cmd.Flags().GetUint64(flagPort)
 
+			toshi := database.NewAccount(wallet.ToshiAccount)
+			jtang := database.NewAccount(wallet.JTangAccount)
+			qudsii := database.NewAccount(wallet.QudsiiAccount)
+
 			peer := node.NewPeerNode(
 				"127.0.0.1",
 				8080,
 				true,
-				database.NewAccount("toshi"),
+				toshi,
 				false,
 			)
 
 			n := node.NewNode(getDataDirFromCmd(cmd), ip, port, database.NewAccount(miner), peer)
 
-			n.AddPendingTX(database.NewTx("toshi", "toshi", 3, ""), peer)
-			n.AddPendingTX(database.NewTx("toshi", "jtang", 2000, ""), peer)
-			n.AddPendingTX(database.NewTx("jtang", "toshi", 1, ""), peer)
-			n.AddPendingTX(database.NewTx("jtang", "qudsii", 1000, ""), peer)
-			n.AddPendingTX(database.NewTx("jtang", "toshi", 50, ""), peer)
+			n.AddPendingTX(database.NewTx(toshi, toshi, 3, ""), peer)
+			n.AddPendingTX(database.NewTx(toshi, jtang, 2000, ""), peer)
+			n.AddPendingTX(database.NewTx(jtang, toshi, 1, ""), peer)
+			n.AddPendingTX(database.NewTx(jtang, qudsii, 1000, ""), peer)
+			n.AddPendingTX(database.NewTx(jtang, toshi, 50, ""), peer)
 
 			ctx, closeNode := context.WithTimeout(context.Background(), time.Minute*15)
 

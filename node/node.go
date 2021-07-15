@@ -7,10 +7,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/jTanG0506/go-blockchain/database"
+	"github.com/jTanG0506/go-blockchain/wallet"
 )
 
-const DefaultMiner = ""
+const DefaultBootstrapIp = "127.0.0.1"
+const DefaultBootstrapPort = 8080
+const DefaultBootstrapAcc = wallet.ToshiAccount
+const DefaultMiner = "0x0000000000000000000000000000000000000000"
 const DefaultIP = "127.0.0.1"
 const DefaultHTTPPort = 8080
 const statusEndpoint = "/node/status"
@@ -25,11 +30,11 @@ const addPeerEndpointQueryKeyPort = "port"
 const addPeerEndpointQueryKeyMiner = "miner"
 
 type PeerNode struct {
-	IP          string           `json:"ip"`
-	Port        uint64           `json:"port"`
-	IsBootstrap bool             `json:"is_bootstrap"`
-	Account     database.Account `json:"account"`
-	IsActive    bool             `json:"is_active"`
+	IP          string         `json:"ip"`
+	Port        uint64         `json:"port"`
+	IsBootstrap bool           `json:"is_bootstrap"`
+	Account     common.Address `json:"account"`
+	IsActive    bool           `json:"is_active"`
 }
 
 func (pn PeerNode) TcpAddress() string {
@@ -49,7 +54,7 @@ type Node struct {
 	isMining        bool
 }
 
-func NewNode(dataDir string, ip string, port uint64, acc database.Account, bootstrap PeerNode) *Node {
+func NewNode(dataDir string, ip string, port uint64, acc common.Address, bootstrap PeerNode) *Node {
 	knownPeers := make(map[string]PeerNode)
 	knownPeers[bootstrap.TcpAddress()] = bootstrap
 
@@ -65,7 +70,7 @@ func NewNode(dataDir string, ip string, port uint64, acc database.Account, boots
 	}
 }
 
-func NewPeerNode(ip string, port uint64, isBootstrap bool, acc database.Account, isActive bool) PeerNode {
+func NewPeerNode(ip string, port uint64, isBootstrap bool, acc common.Address, isActive bool) PeerNode {
 	return PeerNode{ip, port, isBootstrap, acc, isActive}
 }
 

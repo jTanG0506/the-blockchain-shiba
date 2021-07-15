@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/jTanG0506/go-blockchain/database"
 )
 
@@ -12,11 +13,11 @@ type PendingBlock struct {
 	parent database.Hash
 	number uint64
 	time   uint64
-	miner  database.Account
+	miner  common.Address
 	txs    []database.Tx
 }
 
-func NewPendingBlock(parent database.Hash, number uint64, miner database.Account, txs []database.Tx) PendingBlock {
+func NewPendingBlock(parent database.Hash, number uint64, miner common.Address, txs []database.Tx) PendingBlock {
 	return PendingBlock{parent, number, uint64(time.Now().Unix()), miner, txs}
 }
 
@@ -56,7 +57,7 @@ func Mine(ctx context.Context, pb PendingBlock) (database.Block, error) {
 	fmt.Printf("Height: '%v'\n", block.Header.Number)
 	fmt.Printf("Nonce: '%v'\n", block.Header.Nonce)
 	fmt.Printf("Created: '%v'\n", block.Header.Time)
-	fmt.Printf("Miner: '%v'\n", block.Header.Miner)
+	fmt.Printf("Miner: '%v'\n", block.Header.Miner.String())
 	fmt.Printf("Parent: '%v'\n", block.Header.Parent.Hex())
 	fmt.Printf("Time: %s\n\n", time.Since(start))
 

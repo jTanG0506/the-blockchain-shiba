@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/jTanG0506/go-blockchain/database"
+	"github.com/jTanG0506/go-blockchain/wallet"
 )
 
 func TestValidBlockHash(t *testing.T) {
@@ -32,7 +34,7 @@ func TestInvalidBlockHash(t *testing.T) {
 }
 
 func TestMine(t *testing.T) {
-	miner := database.NewAccount("toshi")
+	miner := database.NewAccount(wallet.ToshiAccount)
 	pendingBlock := createRandomPendingBlock(miner)
 	ctx := context.Background()
 
@@ -50,13 +52,13 @@ func TestMine(t *testing.T) {
 		t.Fatalf("Mined block has invalid block hash: %x", err)
 	}
 
-	if minedBlock.Header.Miner != miner {
+	if minedBlock.Header.Miner.String() != miner.String() {
 		t.Fatalf("Mined blocked miner was %s, expected %s", minedBlock.Header.Miner, miner)
 	}
 }
 
 func TestMineWithTimeout(t *testing.T) {
-	miner := database.NewAccount("toshi")
+	miner := database.NewAccount(wallet.ToshiAccount)
 	pendingBlock := createRandomPendingBlock(miner)
 	ctx, _ := context.WithTimeout(context.Background(), time.Microsecond*100)
 
@@ -66,14 +68,17 @@ func TestMineWithTimeout(t *testing.T) {
 	}
 }
 
-func createRandomPendingBlock(miner database.Account) PendingBlock {
+func createRandomPendingBlock(miner common.Address) PendingBlock {
+	toshi := database.NewAccount(wallet.ToshiAccount)
+	jtang := database.NewAccount(wallet.JTangAccount)
+
 	return NewPendingBlock(
 		database.Hash{},
 		0,
 		miner,
 		[]database.Tx{
-			database.NewTx("toshi", "jtang", 1000, ""),
-			database.NewTx("toshi", "toshi", 10, "reward"),
+			database.NewTx(toshi, jtang, 1000, ""),
+			database.NewTx(toshi, toshi, 10, "reward"),
 		},
 	)
 }
