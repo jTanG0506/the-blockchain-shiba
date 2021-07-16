@@ -25,7 +25,6 @@ func main() {
 		},
 	}
 	tbsCmd.AddCommand(versionCmd)
-	tbsCmd.AddCommand(migrateCmd())
 	tbsCmd.AddCommand(walletCmd())
 	tbsCmd.AddCommand(runCmd())
 	tbsCmd.AddCommand(balancesCmd())
