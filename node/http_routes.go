@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jTanG0506/go-blockchain/database"
+	"github.com/jTanG0506/go-blockchain/wallet"
 )
 
 type ErrorRes struct {
@@ -22,14 +23,15 @@ type StatusRes struct {
 	Hash       database.Hash       `json:"block_hash"`
 	Number     uint64              `json:"block_number"`
 	KnownPeers map[string]PeerNode `json:"peers_known"`
-	PendingTXs []database.Tx       `json:"pending_txs"`
+	PendingTXs []database.SignedTx `json:"pending_txs"`
 }
 
 type AddTXReq struct {
-	From  string `json:"from"`
-	To    string `json:"to"`
-	Value uint   `json:"value"`
-	Data  string `json:"data"`
+	From    string `json:"from"`
+	FromPwd string `json:"from_pwd"`
+	To      string `json:"to"`
+	Value   uint   `json:"value"`
+	Data    string `json:"data"`
 }
 
 type AddTXRes struct {
@@ -68,6 +70,17 @@ func txAddHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 		return
 	}
 
+	from := database.NewAccount(req.From)
+	if from.String() == common.HexToAddress("").String() {
+		writeRes(w, fmt.Errorf("%s is an invalid 'from' sender", from.String()))
+		return
+	}
+
+	if req.FromPwd == "" {
+		writeErrRes(w, fmt.Errorf("password to decrypt account %s is required, but 'from_pwd' is empty", from.String()))
+		return
+	}
+
 	tx := database.NewTx(
 		database.NewAccount(req.From),
 		database.NewAccount(req.To),
@@ -75,7 +88,18 @@ func txAddHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 		req.Data,
 	)
 
-	err = node.AddPendingTX(tx, node.info)
+	signedTx, err := wallet.SignTxWithKeystoreAccount(
+		tx,
+		from,
+		req.FromPwd,
+		wallet.GetKeystoreDirPath(node.dataDir),
+	)
+	if err != nil {
+		writeErrRes(w, err)
+		return
+	}
+
+	err = node.AddPendingTX(signedTx, node.info)
 	if err != nil {
 		writeErrRes(w, err)
 		return
