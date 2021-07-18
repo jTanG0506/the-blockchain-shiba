@@ -12,7 +12,8 @@ import (
 )
 
 type State struct {
-	Balances map[common.Address]uint
+	Balances        map[common.Address]uint
+	AccountsToNonce map[common.Address]uint
 
 	dbFile          *os.File
 	lastBlock       Block
@@ -36,6 +37,7 @@ func NewStateFromDisk(dataDir string) (*State, error) {
 		balances[account] = balance
 	}
 
+	accountToNonce := make(map[common.Address]uint)
 	blocksFilePath := getBlocksDbFilePath(dataDir)
 	blocks, err := os.OpenFile(blocksFilePath, os.O_APPEND|os.O_RDWR, 0600)
 	if err != nil {
@@ -43,7 +45,7 @@ func NewStateFromDisk(dataDir string) (*State, error) {
 	}
 
 	scanner := bufio.NewScanner(blocks)
-	state := &State{balances, blocks, Block{}, Hash{}, false}
+	state := &State{balances, accountToNonce, blocks, Block{}, Hash{}, false}
 
 	for scanner.Scan() {
 		if err := scanner.Err(); err != nil {
@@ -131,6 +133,7 @@ func (s *State) AddBlock(b Block) (Hash, error) {
 	}
 
 	s.Balances = tempState.Balances
+	s.AccountsToNonce = tempState.AccountsToNonce
 	s.lastBlockHash = blockHash
 	s.lastBlock = b
 	s.hasGenesisBlock = true
@@ -192,12 +195,18 @@ func applyTx(tx SignedTx, s *State) error {
 		return fmt.Errorf("wrong Tx, sender '%s' is forged", tx.From.String())
 	}
 
+	expectedNonce := s.GetNextAccountNonce(tx.From)
+	if tx.Nonce != expectedNonce {
+		fmt.Errorf("wrong Tx, sender '%s' next nonce must be '%d', not '%d'", tx.From.String(), expectedNonce, tx.Nonce)
+	}
+
 	if tx.Value > s.Balances[tx.From] {
 		return fmt.Errorf("insufficient balance. Sender '%s' balance is %d TBS. Tx cost is %d TBS", tx.From.String(), s.Balances[tx.From], tx.Value)
 	}
 
 	s.Balances[tx.From] -= tx.Value
 	s.Balances[tx.To] += tx.Value
+	s.AccountsToNonce[tx.From] = tx.Nonce
 
 	return nil
 }
@@ -205,6 +214,7 @@ func applyTx(tx SignedTx, s *State) error {
 func (s *State) copy() State {
 	c := State{}
 	c.Balances = make(map[common.Address]uint)
+	c.AccountsToNonce = make(map[common.Address]uint)
 	c.lastBlock = s.lastBlock
 	c.lastBlockHash = s.lastBlockHash
 	c.hasGenesisBlock = s.hasGenesisBlock
@@ -213,7 +223,15 @@ func (s *State) copy() State {
 		c.Balances[acc] = balance
 	}
 
+	for acc, nonce := range s.AccountsToNonce {
+		c.AccountsToNonce[acc] = nonce
+	}
+
 	return c
+}
+
+func (s *State) GetNextAccountNonce(account common.Address) uint {
+	return s.AccountsToNonce[account] + 1
 }
 
 func (s *State) Close() {

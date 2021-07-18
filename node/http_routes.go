@@ -81,9 +81,11 @@ func txAddHandler(w http.ResponseWriter, r *http.Request, node *Node) {
 		return
 	}
 
+	nonce := node.state.GetNextAccountNonce(from)
 	tx := database.NewTx(
-		database.NewAccount(req.From),
+		from,
 		database.NewAccount(req.To),
+		nonce,
 		req.Value,
 		req.Data,
 	)
