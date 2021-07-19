@@ -48,38 +48,17 @@ func TestNode_Run(t *testing.T) {
 }
 
 func TestNode_Mining(t *testing.T) {
-	toshi := database.NewAccount(testKsToshiAccount)
-	jtang := database.NewAccount(testKsJTangAccount)
-
-	genesisBalances := make(map[common.Address]uint)
-	genesisBalances[toshi] = 1000000
-	genesis := database.Genesis{Balances: genesisBalances}
-	genesisJson, err := json.Marshal(genesis)
+	dataDir, toshi, jtang, err := setupTestNodeDir(t)
+	defer teardownTestNodeDir(dataDir)
 	if err != nil {
-		t.Fatalf("unexpected error when creating test genesis: %s", err.Error())
-	}
-
-	dataDir, err := getTestDataDirPath()
-	if err != nil {
-		t.Fatalf("unexpected error when getting test data directory: %s", err)
-	}
-
-	err = database.InitDataDirIfNotExists(dataDir, genesisJson)
-	if err != nil {
-		t.Fatalf("unexpected error when initialising dataDir: %s", err)
-	}
-	defer fs.RemoveDir(dataDir)
-
-	err = copyKeystoreFilesIntoTestDataDirPath(dataDir)
-	if err != nil {
-		t.Fatalf("unexpected error when copying keystore files to test directory: %s", err)
+		t.Fatalf("error setting up test node directory. %s", err.Error())
 	}
 
 	nodeInfo := NewPeerNode(
 		"127.0.0.1",
 		8081,
 		false,
-		database.NewAccount(""),
+		jtang,
 		true,
 	)
 
@@ -89,7 +68,7 @@ func TestNode_Mining(t *testing.T) {
 	// Add a TX in 3 seconds from now
 	go func() {
 		time.Sleep(time.Second * miningIntervalInSeconds / 2)
-		tx := database.NewTx(toshi, jtang, 100, "")
+		tx := database.NewTx(toshi, jtang, 100, 1, "")
 
 		signedTx, err := wallet.SignTxWithKeystoreAccount(
 			tx,
@@ -108,7 +87,7 @@ func TestNode_Mining(t *testing.T) {
 	// the first TX is being mined
 	go func() {
 		time.Sleep(time.Second*miningIntervalInSeconds + 2)
-		tx := database.NewTx(toshi, jtang, 200, "")
+		tx := database.NewTx(toshi, jtang, 200, 2, "")
 
 		signedTx, err := wallet.SignTxWithKeystoreAccount(
 			tx,
@@ -145,31 +124,10 @@ func TestNode_Mining(t *testing.T) {
 }
 
 func TestNode_MiningStopsOnNewSyncedBlock(t *testing.T) {
-	toshi := database.NewAccount(testKsToshiAccount)
-	jtang := database.NewAccount(testKsJTangAccount)
-
-	genesisBalances := make(map[common.Address]uint)
-	genesisBalances[toshi] = 1000000
-	genesis := database.Genesis{Balances: genesisBalances}
-	genesisJson, err := json.Marshal(genesis)
+	dataDir, toshi, jtang, err := setupTestNodeDir(t)
+	defer teardownTestNodeDir(dataDir)
 	if err != nil {
-		t.Fatalf("unexpected error when creating test genesis: %s", err.Error())
-	}
-
-	dataDir, err := getTestDataDirPath()
-	if err != nil {
-		t.Fatalf("unexpected error when getting test data directory: %s", err)
-	}
-
-	err = database.InitDataDirIfNotExists(dataDir, genesisJson)
-	if err != nil {
-		t.Fatalf("unexpected error when initialising dataDir: %s", err)
-	}
-	defer fs.RemoveDir(dataDir)
-
-	err = copyKeystoreFilesIntoTestDataDirPath(dataDir)
-	if err != nil {
-		t.Fatalf("unexpected error when copying keystore files to test directory: %s", err)
+		t.Fatalf("error setting up test node directory. %s", err.Error())
 	}
 
 	nodeInfo := NewPeerNode(
@@ -183,15 +141,15 @@ func TestNode_MiningStopsOnNewSyncedBlock(t *testing.T) {
 	n := NewNode(dataDir, nodeInfo.IP, nodeInfo.Port, toshi, nodeInfo)
 	ctx, closeNode := context.WithTimeout(context.Background(), time.Minute*MiningMaxMinutes)
 
-	tx1 := database.NewTx(toshi, jtang, 100, "")
-	tx2 := database.NewTx(toshi, jtang, 200, "")
+	tx1 := database.NewTx(toshi, jtang, 100, 1, "")
+	tx2 := database.NewTx(toshi, jtang, 200, 2, "")
 
-	signedTx1, err := wallet.SignTxWithKeystoreAccount(tx1, toshi, testKsToshiAccount, wallet.GetKeystoreDirPath(dataDir))
+	signedTx1, err := wallet.SignTxWithKeystoreAccount(tx1, toshi, testKsToshiPwd, wallet.GetKeystoreDirPath(dataDir))
 	if err != nil {
 		t.Fatalf("unable to sign tx1 with keystore account: %s", err.Error())
 	}
 
-	signedTx2, err := wallet.SignTxWithKeystoreAccount(tx2, toshi, testKsToshiAccount, wallet.GetKeystoreDirPath(dataDir))
+	signedTx2, err := wallet.SignTxWithKeystoreAccount(tx2, toshi, testKsToshiPwd, wallet.GetKeystoreDirPath(dataDir))
 	if err != nil {
 		t.Fatalf("unable to sign tx1 with keystore account: %s", err.Error())
 	}
@@ -307,8 +265,163 @@ func TestNode_MiningStopsOnNewSyncedBlock(t *testing.T) {
 	}
 }
 
+func TestNode_ForgedTx(t *testing.T) {
+	dataDir, toshi, jtang, err := setupTestNodeDir(t)
+	defer teardownTestNodeDir(dataDir)
+	if err != nil {
+		t.Fatalf("error setting up test node directory. %s", err.Error())
+	}
+
+	toshiPeerNode := NewPeerNode(
+		"127.0.0.1",
+		8081,
+		false,
+		toshi,
+		true,
+	)
+
+	n := NewNode(dataDir, "127.0.0.1", 8081, toshi, PeerNode{})
+	ctx, _ := context.WithTimeout(context.Background(), time.Minute*MiningMaxMinutes)
+
+	txValue := uint(5)
+	txNonce := uint(1)
+	tx := database.NewTx(toshi, jtang, txValue, txNonce, "")
+
+	signedTx, err := wallet.SignTxWithKeystoreAccount(
+		tx,
+		toshi,
+		testKsToshiPwd,
+		wallet.GetKeystoreDirPath(dataDir),
+	)
+	if err != nil {
+		t.Fatalf("unable to sign tx with keystore account: %s", err.Error())
+	}
+
+	go func() {
+		time.Sleep(time.Second * 1)
+		_ = n.AddPendingTX(signedTx, toshiPeerNode)
+	}()
+
+	go func() {
+		time.Sleep(time.Second * (miningIntervalInSeconds + 1))
+		forgedTx := database.NewTx(toshi, jtang, txValue, txNonce, "")
+		forgedSignedTx := database.NewSignedTx(forgedTx, signedTx.Sig)
+
+		_ = n.AddPendingTX(forgedSignedTx, toshiPeerNode)
+	}()
+
+	_ = n.Run(ctx)
+
+	if n.state.LastBlock().Header.Number != 1 {
+		t.Fatalf("expected to only mine one TX, but mined second forged TX too")
+	}
+}
+
+func TestNode_ReplayedTx(t *testing.T) {
+	dataDir, toshi, jtang, err := setupTestNodeDir(t)
+	defer teardownTestNodeDir(dataDir)
+	if err != nil {
+		t.Fatalf("error setting up test node directory. %s", err.Error())
+	}
+
+	n := NewNode(dataDir, "127.0.0.1", 8085, toshi, PeerNode{})
+	ctx, closeNode := context.WithCancel(context.Background())
+	toshiPeerNode := NewPeerNode("127.0.0.1", 8085, false, toshi, true)
+	jtangPeerNode := NewPeerNode("127.0.0.1", 8086, false, jtang, true)
+
+	txValue := uint(5)
+	txNonce := uint(1)
+	tx := database.NewTx(toshi, jtang, txValue, txNonce, "")
+
+	signedTx, err := wallet.SignTxWithKeystoreAccount(
+		tx,
+		toshi,
+		testKsToshiPwd,
+		wallet.GetKeystoreDirPath(dataDir),
+	)
+	if err != nil {
+		t.Fatalf("unable to sign tx with keystore account: %s", err.Error())
+	}
+
+	_ = n.AddPendingTX(signedTx, toshiPeerNode)
+
+	go func() {
+		ticker := time.NewTicker(time.Second * (miningIntervalInSeconds - 3))
+		wasReplayedTxAdded := false
+
+		for {
+			select {
+			case <-ticker.C:
+				if n.state.LastBlock().Header.Number == 0 {
+					if wasReplayedTxAdded && !n.isMining {
+						closeNode()
+						return
+					}
+
+					n.archivedTXs = make(map[string]database.SignedTx)
+					_ = n.AddPendingTX(signedTx, jtangPeerNode)
+					wasReplayedTxAdded = true
+				}
+
+				if n.state.LastBlock().Header.Number == 1 {
+					closeNode()
+					return
+				}
+			}
+		}
+	}()
+
+	_ = n.Run(ctx)
+
+	if n.state.Balances[jtang] == txValue*2 {
+		t.Fatalf("replay attack was successful")
+	}
+
+	if n.state.LastBlock().Header.Number != 1 {
+		t.Fatalf("expected to only mine one TX, but mined second forged TX which contained malicious TX")
+	}
+}
+
 func getTestDataDirPath() (string, error) {
 	return ioutil.TempDir(os.TempDir(), ".tbs_test")
+}
+
+func setupTestNodeDir(t *testing.T) (dataDir string, toshi, jtang common.Address, err error) {
+	toshi = database.NewAccount(testKsToshiAccount)
+	jtang = database.NewAccount(testKsJTangAccount)
+
+	genesisBalances := make(map[common.Address]uint)
+	genesisBalances[toshi] = 1000000
+	genesis := database.Genesis{Balances: genesisBalances}
+	genesisJson, err := json.Marshal(genesis)
+	if err != nil {
+		t.Logf("unexpected error when creating test genesis: %s", err.Error())
+		return "", common.Address{}, common.Address{}, err
+	}
+
+	dataDir, err = getTestDataDirPath()
+	if err != nil {
+		t.Logf("unexpected error when getting test data directory: %s", err)
+		return "", common.Address{}, common.Address{}, err
+	}
+
+	err = database.InitDataDirIfNotExists(dataDir, genesisJson)
+	if err != nil {
+		t.Logf("unexpected error when initialising dataDir: %s", err)
+		return "", common.Address{}, common.Address{}, err
+	}
+
+	err = copyKeystoreFilesIntoTestDataDirPath(dataDir)
+	if err != nil {
+		t.Logf("unexpected error when copying keystore files to test directory: %s", err)
+		return "", common.Address{}, common.Address{}, err
+	}
+
+	return dataDir, toshi, jtang, nil
+}
+
+func teardownTestNodeDir(dataDir string) error {
+	return fs.RemoveDir(dataDir)
 }
 
 // Copy the pregenerated, committed keystore files into a given dirPath for testing
@@ -332,7 +445,7 @@ func copyKeystoreFilesIntoTestDataDirPath(dataDir string) error {
 	}
 	defer toshiDestKs.Close()
 
-	_, err = io.Copy(toshiSrcKs, toshiDestKs)
+	_, err = io.Copy(toshiDestKs, toshiSrcKs)
 	if err != nil {
 		return err
 	}
@@ -350,13 +463,13 @@ func copyKeystoreFilesIntoTestDataDirPath(dataDir string) error {
 	}
 	defer jtangDestKs.Close()
 
-	_, err = io.Copy(toshiSrcKs, toshiDestKs)
+	_, err = io.Copy(jtangDestKs, jtangSrcKs)
 	if err != nil {
 		return err
 	}
 
 	// Copy Qudsii's Account
-	qudsiiSrcKs, err := os.Open(testKsJTangFile)
+	qudsiiSrcKs, err := os.Open(testKsQudsiiFile)
 	if err != nil {
 		return err
 	}
@@ -368,7 +481,7 @@ func copyKeystoreFilesIntoTestDataDirPath(dataDir string) error {
 	}
 	defer qudsiiDestKs.Close()
 
-	_, err = io.Copy(toshiSrcKs, toshiDestKs)
+	_, err = io.Copy(qudsiiDestKs, qudsiiSrcKs)
 	if err != nil {
 		return err
 	}
