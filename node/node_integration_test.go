@@ -48,7 +48,7 @@ func TestNode_Run(t *testing.T) {
 }
 
 func TestNode_Mining(t *testing.T) {
-	dataDir, toshi, jtang, err := setupTestNodeDir(t)
+	dataDir, toshi, jtang, err := setupTestNodeDir(t, 1000000)
 	defer teardownTestNodeDir(dataDir)
 	if err != nil {
 		t.Fatalf("error setting up test node directory. %s", err.Error())
@@ -124,7 +124,7 @@ func TestNode_Mining(t *testing.T) {
 }
 
 func TestNode_MiningStopsOnNewSyncedBlock(t *testing.T) {
-	dataDir, toshi, jtang, err := setupTestNodeDir(t)
+	dataDir, toshi, jtang, err := setupTestNodeDir(t, 1000000)
 	defer teardownTestNodeDir(dataDir)
 	if err != nil {
 		t.Fatalf("error setting up test node directory. %s", err.Error())
@@ -266,7 +266,7 @@ func TestNode_MiningStopsOnNewSyncedBlock(t *testing.T) {
 }
 
 func TestNode_ForgedTx(t *testing.T) {
-	dataDir, toshi, jtang, err := setupTestNodeDir(t)
+	dataDir, toshi, jtang, err := setupTestNodeDir(t, 1000000)
 	defer teardownTestNodeDir(dataDir)
 	if err != nil {
 		t.Fatalf("error setting up test node directory. %s", err.Error())
@@ -318,7 +318,7 @@ func TestNode_ForgedTx(t *testing.T) {
 }
 
 func TestNode_ReplayedTx(t *testing.T) {
-	dataDir, toshi, jtang, err := setupTestNodeDir(t)
+	dataDir, toshi, jtang, err := setupTestNodeDir(t, 1000000)
 	defer teardownTestNodeDir(dataDir)
 	if err != nil {
 		t.Fatalf("error setting up test node directory. %s", err.Error())
@@ -382,16 +382,89 @@ func TestNode_ReplayedTx(t *testing.T) {
 	}
 }
 
+func TestNode_MiningSpamTransaction(t *testing.T) {
+	toshiBalance := uint(1000)
+	jtangBalance := uint(0)
+	minerBalance := uint(0)
+
+	minerKey, err := wallet.NewRandomKey()
+	if err != nil {
+		t.Fatalf("failed to create random wallet key. %s", err)
+	}
+
+	miner := minerKey.Address
+	dataDir, toshi, jtang, err := setupTestNodeDir(t, toshiBalance)
+	if err != nil {
+		t.Fatalf("failed to setup test node directory. %s", err)
+	}
+	defer fs.RemoveDir(dataDir)
+
+	n := NewNode(dataDir, "127.0.0.1", 8085, miner, PeerNode{})
+	ctx, closeNode := context.WithCancel(context.Background())
+	minerPeerNode := NewPeerNode("127.0.0.1", 8085, false, miner, true)
+
+	txValue := uint(200)
+	txCount := uint(4)
+	for i := uint(1); i <= txCount; i++ {
+		time.Sleep(time.Second)
+
+		txNonce := i
+		tx := database.NewTx(toshi, jtang, txValue, txNonce, "")
+		signedTx, err := wallet.SignTxWithKeystoreAccount(tx, toshi, testKsToshiPwd, wallet.GetKeystoreDirPath(dataDir))
+		if err != nil {
+			t.Fatalf("failed to sign tx with keystore account: %v", err)
+		}
+
+		_ = n.AddPendingTX(signedTx, minerPeerNode)
+	}
+
+	go func() {
+		ticker := time.NewTicker(time.Second * 10)
+
+		for {
+			select {
+			case <-ticker.C:
+				if !n.state.LatestBlockHash().IsEmpty() {
+					closeNode()
+					return
+				}
+			}
+		}
+	}()
+
+	_ = n.Run(ctx)
+
+	expectedToshiBalance := toshiBalance - (txCount * (txValue + database.TxGasFee))
+	expectedJtangBalance := jtangBalance + (txCount * txValue)
+	expectedMinerBalance := minerBalance + database.BlockReward + (txCount * database.TxGasFee)
+
+	if n.state.Balances[toshi] != expectedToshiBalance {
+		t.Errorf("toshi balance is incorrect. Expected: %d. Got: %d", expectedToshiBalance, n.state.Balances[toshi])
+	}
+
+	if n.state.Balances[jtang] != expectedJtangBalance {
+		t.Errorf("jTanG balance is incorrect. Expected: %d. Got: %d", expectedJtangBalance, n.state.Balances[jtang])
+	}
+
+	if n.state.Balances[miner] != expectedMinerBalance {
+		t.Errorf("Miner balance is incorrect. Expected: %d. Got: %d", expectedMinerBalance, n.state.Balances[miner])
+	}
+
+	t.Logf("toshi final balance: %d", n.state.Balances[toshi])
+	t.Logf("jTanG final balance: %d", n.state.Balances[jtang])
+	t.Logf("miner final balance: %d", n.state.Balances[miner])
+}
+
 func getTestDataDirPath() (string, error) {
 	return ioutil.TempDir(os.TempDir(), ".tbs_test")
 }
 
-func setupTestNodeDir(t *testing.T) (dataDir string, toshi, jtang common.Address, err error) {
+func setupTestNodeDir(t *testing.T, toshiAccBalance uint) (dataDir string, toshi, jtang common.Address, err error) {
 	toshi = database.NewAccount(testKsToshiAccount)
 	jtang = database.NewAccount(testKsJTangAccount)
 
 	genesisBalances := make(map[common.Address]uint)
-	genesisBalances[toshi] = 1000000
+	genesisBalances[toshi] = toshiAccBalance
 	genesis := database.Genesis{Balances: genesisBalances}
 	genesisJson, err := json.Marshal(genesis)
 	if err != nil {
