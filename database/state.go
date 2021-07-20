@@ -11,6 +11,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
+const TxGasFee = uint(50)
+
 type State struct {
 	Balances        map[common.Address]uint
 	AccountsToNonce map[common.Address]uint
@@ -167,6 +169,7 @@ func applyBlock(b Block, s *State) error {
 	}
 
 	s.Balances[b.Header.Miner] += BlockReward
+	s.Balances[b.Header.Miner] += uint(len(b.TXs)) * TxGasFee
 	return nil
 }
 
@@ -200,11 +203,12 @@ func applyTx(tx SignedTx, s *State) error {
 		fmt.Errorf("wrong Tx, sender '%s' next nonce must be '%d', not '%d'", tx.From.String(), expectedNonce, tx.Nonce)
 	}
 
-	if tx.Value > s.Balances[tx.From] {
-		return fmt.Errorf("insufficient balance. Sender '%s' balance is %d TBS. Tx cost is %d TBS", tx.From.String(), s.Balances[tx.From], tx.Value)
+	txCost := tx.Value + TxGasFee
+	if txCost > s.Balances[tx.From] {
+		return fmt.Errorf("insufficient balance. Sender '%s' balance is %d TBS. Tx cost is %d TBS", tx.From.String(), s.Balances[tx.From], txCost)
 	}
 
-	s.Balances[tx.From] -= tx.Value
+	s.Balances[tx.From] -= txCost
 	s.Balances[tx.To] += tx.Value
 	s.AccountsToNonce[tx.From] = tx.Nonce
 
