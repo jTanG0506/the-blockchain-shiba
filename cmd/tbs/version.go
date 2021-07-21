@@ -6,10 +6,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const Major = "0"
-const Minor = "1"
+const Major = "1"
+const Minor = "0"
 const Fix = "0"
-const Verbal = "TX Add && Balances List"
+const Verbal = "Initial Version of TBS"
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
